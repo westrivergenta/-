@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>バレーボール ローテーション管理</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    body { font-family: sans-serif; margin: 15px; background: #f4f6f8; }
+    h1 { font-size: 1.2rem; text-align: center; }
+    .team-container { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }
+    .team-card { background: white; border-radius: 8px; padding: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+    .team-title { font-weight: bold; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #007bff; }
+    .team-b .team-title { border-bottom-color: #dc3545; }
+    .player-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .pos-label { width: 30px; font-weight: bold; text-align: center; }
+    input[type="number"], input[type="text"] { padding: 5px; border: 1px solid #ccc; border-radius: 4px; }
+    .num-input { width: 50px; }
+    .name-input { flex-grow: 1; }
+    .captain-label { font-size: 0.85rem; display: flex; align-items: center; gap: 3px; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+  <h1>バレーボール メンバー・ローテーション設定</h1>
+
+  <div class="team-container">
+    <div class="team-card team-a">
+      <div class="team-title">チーム A</div>
+      <div id="teamA-players"></div>
+    </div>
+
+    <div class="team-card team-b">
+      <div class="team-title">チーム B</div>
+      <div id="teamB-players"></div>
+    </div>
+  </div>
+
+  <script>
+    function createPlayerRows(containerId, teamPrefix) {
+      const container = document.getElementById(containerId);
+      for (let i = 1; i <= 6; i++) {
+        const row = document.createElement('div');
+        row.className = 'player-row';
+        row.innerHTML = `
+          <span class="pos-label">S${i}</span>
+          <input type="number" class="num-input" placeholder="背番号" value="${i}">
+          <input type="text" class="name-input" placeholder="選手名 ${i}">
+          <label class="captain-label">
+            <input type="radio" name="${teamPrefix}-captain" value="${i}" ${i === 1 ? 'checked' : ''}>
+            C
+          </label>
+        `;
+        container.appendChild(row);
+      }
+    }
+
+    createPlayerRows('teamA-players', 'teamA');
+    createPlayerRows('teamB-players', 'teamB');
+  </script>
+</body>
+</html>

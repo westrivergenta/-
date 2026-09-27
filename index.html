@@ -985,10 +985,10 @@
   <section id="match" class="screen is-hidden-right" aria-label="試合">
     <header class="app-bar">
       <button class="back-btn" data-action="back" id="matchBack">‹ 確認画面</button>
+      <button class="back-btn" data-action="to-confirm" id="matchConfirm" hidden>確認画面</button>
       <h2>試合中</h2>
       <div class="bar-actions">
         <button class="back-btn" data-action="fullscreen" id="matchFs" hidden>⛶ 全画面</button>
-        <button class="back-btn" data-action="match-edit" id="matchEdit" hidden>オーダー変更</button>
       </div>
     </header>
 
@@ -1723,13 +1723,13 @@
     // 試合画面の左上のボタン
     //  第2・第3セットの開始前 → オーダー変更（選手交代の修正）
     //  それ以外 → 第2セットはメニュー、第1・第3セットは確認画面
-    //  第3セットの開始前 → 左上は確認画面、右上にオーダー変更
+    //  第3セットの開始前 → 左から「オーダー変更」「確認画面」
     function updateMatchBack() {
       const ready = match && match.phase === 'ready';
       $('matchBack').textContent =
-        ready && data.setNo === 2 ? '‹ オーダー変更'
+        ready && data.setNo > 1 ? '‹ オーダー変更'
         : data.setNo === 2 ? '‹ メニュー' : '‹ 確認画面';
-      $('matchEdit').hidden = !(ready && data.setNo === 3);
+      $('matchConfirm').hidden = !(ready && data.setNo === 3);
       updateFsButton();
     }
 
@@ -1937,7 +1937,7 @@
       else if (action === 'end-set') { renderSetEnd(); goTo('setEnd'); }
       else if (action === 'undo') undoPoint();
       else if (action === 'sub-set') setSub(btn.dataset.val === '1');
-      else if (action === 'match-edit') startEdit(true, 'match');
+      else if (action === 'to-confirm') { renderConfirm(); goTo('confirm', true); }   // 第3セット開始前（まだ得点なし）
       else if (action === 'fullscreen') goFullscreen();
       else if (action === 'next-set') nextSet();
       else if (action === 'menu-end') { match = null; clearSession(); showMenu(); }
@@ -1960,11 +1960,8 @@
           else { teamIndex = 1; renderSetup(); goTo('setup', true); }
         }
         else if (current === 'setEnd') goTo('match', true);
-        else if (current === 'match' && match && match.phase === 'ready' && data.setNo === 2) {
+        else if (current === 'match' && match && match.phase === 'ready' && data.setNo > 1) {
           startEdit(true, 'match');          // 選手交代の修正
-        }
-        else if (current === 'match' && match && match.phase === 'ready' && data.setNo === 3) {
-          renderConfirm(); goTo('confirm', true);   // まだ得点がないので確認なしで戻る
         }
         else if (current === 'match') {
           if (data.setNo === 2) {

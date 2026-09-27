@@ -1096,6 +1096,14 @@
   <script>
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+    /* ---------- オフライン対応（GitHub Pages など https で公開したときだけ） ----------
+       sw.js を index.html と同じフォルダに置く */
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      });
+    }
+
     /* ---------- バージョン（修正したらここを更新） ---------- */
     const APP_VERSION = '0.1';
     document.getElementById('appVersion').textContent = 'ver' + APP_VERSION;

@@ -1076,7 +1076,7 @@
     const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     /* ---------- バージョン（修正したらここを更新） ---------- */
-    const APP_VERSION = '0.0';
+    const APP_VERSION = '0.1';
     document.getElementById('appVersion').textContent = 'ver' + APP_VERSION;
 
     /* ---------- 画面の高さ（スマホのアドレスバー分を除いた実際の高さ） ---------- */
@@ -1968,11 +1968,13 @@
 
     /* =========================================================
        オープニングアニメーション
-       0.00s  相手コートの前衛がアンダーサーブ（高い山なりで後方へ）
-       0.48s  レシーブ
-       0.98s  トス
-       1.38s  スパイク → 相手コートに突き刺さる → 画面が切り替わる
+       （実際の時間は OPENING_SLOW 倍。全体で約4秒）
+       0.0s  相手コートの前衛がアンダーサーブ（高い山なりで後方へ）
+       1.2s  レシーブ
+       2.1s  トス
+       2.8s  スパイク → 相手コートに突き刺さる → 画面が切り替わる
        ========================================================= */
+    const OPENING_SLOW = 1.72;   // オープニングの再生速度（大きいほどゆっくり）
     (function opening() {
       const layer = document.getElementById('opening');
       let done = false, raf = 0, wipeStarted = false;
@@ -2099,7 +2101,8 @@
 
       function frame(now) {
         // 最初のサーブ部分だけ少しゆっくり見せる（山なりの軌道のため）
-        const T = now - start;
+        // 全体をゆっくり再生（約2.3秒 → 約4秒）
+        const T = (now - start) / OPENING_SLOW;
         const t = T < 700 ? T * 480 / 700 : T - 220;
 
         // --- 自チーム ---
@@ -2171,7 +2174,7 @@
           Object.assign(wipe.style, {
             width: `${R * 2}px`, height: `${R * 2}px`,
             left: `${sp.x - R}px`, top: `${sp.y - R}px`,
-            transition: 'transform .4s cubic-bezier(.6,0,.4,1)'
+            transition: `transform ${0.4 * OPENING_SLOW}s cubic-bezier(.6,0,.4,1)`
           });
           requestAnimationFrame(() => wipe.style.transform = 'scale(1)');
         }

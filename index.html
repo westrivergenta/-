@@ -291,6 +291,7 @@
     /* ---------- 対戦確認画面 ---------- */
     #confirm { background: var(--paper); display: flex; flex-direction: column; }
     .bar-right { margin-left: auto; }
+    .bar-actions { margin-left: auto; display: flex; gap: 6px; }
     .vs-wrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 20px 10px; }
     .vs { position: relative; display: grid; grid-template-columns: 1fr 1fr; width: 100%; max-width: 620px; }
     .vs-side { position: relative; z-index: 1; }
@@ -985,7 +986,10 @@
     <header class="app-bar">
       <button class="back-btn" data-action="back" id="matchBack">‹ 確認画面</button>
       <h2>試合中</h2>
-      <button class="back-btn bar-right" data-action="match-edit" id="matchEdit" hidden>オーダー変更</button>
+      <div class="bar-actions">
+        <button class="back-btn" data-action="fullscreen" id="matchFs" hidden>⛶ 全画面</button>
+        <button class="back-btn" data-action="match-edit" id="matchEdit" hidden>オーダー変更</button>
+      </div>
     </header>
 
     <div class="m-set" id="mSet"></div>
@@ -1101,9 +1105,18 @@
       || window.navigator.standalone === true;
     function lockLandscape() {
       if (!canLock) return;
-      const lock = () => screen.orientation.lock('landscape').catch(() => {});
-      if (inAppMode || document.fullscreenElement) lock();
-      else document.documentElement.requestFullscreen({ navigationUI: 'hide' }).then(lock).catch(() => {});
+      // 全画面中（またはホーム画面のアプリ）なら向きだけ固定。ここでは全画面を新たに要求しない
+      if (inAppMode || document.fullscreenElement) screen.orientation.lock('landscape').catch(() => {});
+    }
+    // 全画面にする（ボタンやオーダー登録開始など、タップしたときだけ）
+    function goFullscreen() {
+      if (!canFS || inAppMode || document.fullscreenElement) return;
+      document.documentElement.requestFullscreen({ navigationUI: 'hide' })
+        .then(() => {
+          if (!canLock) return;
+          screen.orientation.lock(current === 'match' ? 'landscape' : 'portrait').catch(() => {});
+        })
+        .catch(() => {});
     }
     function orientFor(id) {
       const land = LANDSCAPE_SCREENS.includes(id);
@@ -1124,7 +1137,7 @@
     }
     if (canLock) {
       document.getElementById('rotBtn').hidden = false;
-      document.getElementById('rotBtn').addEventListener('click', lockLandscape);
+      document.getElementById('rotBtn').addEventListener('click', () => { goFullscreen(); lockLandscape(); });
     }
 
     /* ---------- 横向きのときは全画面に（URLバーを隠す） ----------
@@ -1137,20 +1150,19 @@
     function needsFullscreen() {
       return canFS && isTouch && !inAppMode && landMQ.matches && !document.fullscreenElement && current !== 'bye';
     }
-    function ensureFullscreen() {
-      if (!needsFullscreen()) return;
-      document.documentElement.requestFullscreen({ navigationUI: 'hide' })
-        .then(() => { if (current === 'match' && canLock) screen.orientation.lock('landscape').catch(() => {}); })
-        .catch(() => {});
+    // 試合画面の右上の「全画面」ボタン（全画面が解除されているときだけ表示）
+    function updateFsButton() {
+      const b = document.getElementById('matchFs');
+      if (b) b.hidden = !needsFullscreen();
     }
-    document.addEventListener('click', ensureFullscreen, true);
     function hintFullscreen() {
-      if (needsFullscreen()) toast('画面をタップすると全画面表示になります');
+      updateFsButton();
+      if (needsFullscreen() && current === 'match') toast('右上の「全画面」で全画面表示にできます');
     }
     const onLandChange = () => setTimeout(hintFullscreen, 400);
     landMQ.addEventListener ? landMQ.addEventListener('change', onLandChange) : landMQ.addListener(onLandChange);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(hintFullscreen, 400); });
-    document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) setTimeout(hintFullscreen, 400); });
+    document.addEventListener('fullscreenchange', () => { updateFsButton(); if (!document.fullscreenElement) setTimeout(hintFullscreen, 400); });
 
     /* ---------- 途中から再開（アプリを最小化したときなど） ----------
        試合の途中の状態をスマホに一時保存し、開き直したときに「続きから再開」できるようにする。
@@ -1718,6 +1730,7 @@
         ready && data.setNo === 2 ? '‹ オーダー変更'
         : data.setNo === 2 ? '‹ メニュー' : '‹ 確認画面';
       $('matchEdit').hidden = !(ready && data.setNo === 3);
+      updateFsButton();
     }
 
     // チーム名は得点と同じ大きさ。枠に収まらない長い名前だけ自動で縮める
@@ -1882,7 +1895,7 @@
       const where = st.current === 'match' || st.current === 'setEnd'
         ? `第${st.data.setNo}セットの途中` : 'オーダー登録の途中';
       askConfirm(`前回の続きがあります（${where}）。\n続きから再開しますか？`, '再開する', '最初から')
-        .then(ok => { if (ok) resumeSession(st); else clearSession(); });
+        .then(ok => { if (ok) { goFullscreen(); resumeSession(st); } else clearSession(); });
       return true;
     }
 
@@ -1902,7 +1915,7 @@
       const btn = e.target.closest('[data-action]');
       if (!btn) return;
       const action = btn.dataset.action;
-      if (action === 'setup') { data = blankMatch(); editMode = false; match = null; teamIndex = 0; renderSetup(); openScreen('setup'); }
+      if (action === 'setup') { goFullscreen(); data = blankMatch(); editMode = false; match = null; teamIndex = 0; renderSetup(); openScreen('setup'); }
       else if (action === 'quit') quit();
       else if (action === 'complete') complete();
       else if (action === 'swap') courtChange();
@@ -1925,6 +1938,7 @@
       else if (action === 'undo') undoPoint();
       else if (action === 'sub-set') setSub(btn.dataset.val === '1');
       else if (action === 'match-edit') startEdit(true, 'match');
+      else if (action === 'fullscreen') goFullscreen();
       else if (action === 'next-set') nextSet();
       else if (action === 'menu-end') { match = null; clearSession(); showMenu(); }
       else if (action === 'menu') {
@@ -2101,9 +2115,19 @@
 
       function frame(now) {
         // 最初のサーブ部分だけ少しゆっくり見せる（山なりの軌道のため）
-        // 全体をゆっくり再生（約2.3秒 → 約4秒）
-        const T = (now - start) / OPENING_SLOW;
-        const t = T < 700 ? T * 480 / 700 : T - 220;
+        // 全体をゆっくり再生（約4秒）。ただしスパイクのボールが飛ぶところだけは元の速さ
+        const R = now - start;
+        const SPIKE_AT = (1380 + 220) * OPENING_SLOW;   // スパイクの瞬間（実際の経過時間）
+        const SPIKE_MS = 200;                             // ボールが床に届くまで（元の速さ）
+        let t;
+        if (R < SPIKE_AT) {
+          const T = R / OPENING_SLOW;
+          t = T < 700 ? T * 480 / 700 : T - 220;
+        } else if (R < SPIKE_AT + SPIKE_MS) {
+          t = 1380 + (R - SPIKE_AT);
+        } else {
+          t = 1580 + (R - SPIKE_AT - SPIKE_MS) / OPENING_SLOW;
+        }
 
         // --- 自チーム ---
         const rc = bump(t, 250, 480, 750);

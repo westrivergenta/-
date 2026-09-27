@@ -836,7 +836,7 @@
       .m-set { grid-area: set; padding: 6px 0 0; }
       .m-courts { grid-area: court; padding: 12px 0; }
       .m-grid { width: auto; grid-template-columns: auto auto; }
-      .m-grid::after { top: -10px; bottom: -10px; }
+      .m-grid::after { top: -4px; bottom: -10px; }
       .m-courts .vs-court { --slot-size: calc((var(--vh) * 100 - 160px) / 3 - 12px); }
       .m-courts .vs-slot { font-size: calc(var(--slot-size) * .4); }
       .point-btn { height: 56px; margin-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
@@ -985,6 +985,7 @@
     <header class="app-bar">
       <button class="back-btn" data-action="back" id="matchBack">‹ 確認画面</button>
       <h2>試合中</h2>
+      <button class="back-btn bar-right" data-action="match-edit" id="matchEdit" hidden>オーダー変更</button>
     </header>
 
     <div class="m-set" id="mSet"></div>
@@ -1151,6 +1152,35 @@
     document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(hintFullscreen, 400); });
     document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) setTimeout(hintFullscreen, 400); });
 
+    /* ---------- 途中から再開（アプリを最小化したときなど） ----------
+       試合の途中の状態をスマホに一時保存し、開き直したときに「続きから再開」できるようにする。
+       「終了」を押したとき・試合が終わってメニューに戻ったときに消す。12時間たったものも使わない。 */
+    const SESSION_KEY = 'bbv-session';
+    const SESSION_MAX_AGE = 12 * 60 * 60 * 1000;
+    function saveSession() {
+      try {
+        if (typeof current === 'undefined') return;
+        if (current === 'menu' || current === 'bye') { localStorage.removeItem(SESSION_KEY); return; }
+        localStorage.setItem(SESSION_KEY, JSON.stringify({
+          at: Date.now(), current, data, match, teamIndex, editMode, editFrom, editSnapshot, withSub
+        }));
+      } catch (e) {}
+    }
+    function clearSession() { try { localStorage.removeItem(SESSION_KEY); } catch (e) {} }
+    function loadSession() {
+      try {
+        const st = JSON.parse(localStorage.getItem(SESSION_KEY));
+        if (!st || !st.data || Date.now() - st.at > SESSION_MAX_AGE) return null;
+        if (st.current === 'menu' || st.current === 'bye') return null;
+        return st;
+      } catch (e) { return null; }
+    }
+    // 画面が隠れる（最小化・画面オフ）ときに保存
+    document.addEventListener('visibilitychange', () => { if (document.hidden) saveSession(); });
+    window.addEventListener('pagehide', saveSession);
+    // 操作するたびにも保存
+    document.addEventListener('click', () => setTimeout(saveSession, 0));
+
     /* ---------- 保存データ ---------- */
     // 端末には何も保存しない（毎回まっさらな状態から登録）
     // 以前のバージョンで保存されたデータも消しておく
@@ -1252,9 +1282,13 @@
     /* ---------- 背番号テンキー ---------- */
     let editingSlot = null;
     let padValue = '';
+    // 入力欄は毎回空白から。今の番号は薄く表示し、何も押さずに「決定」なら変更しない
+    let padCurrent = '', padTouched = false;
     function openPad(slot) {
       editingSlot = slot;
-      padValue = team().slots[slot] || '';
+      padCurrent = team().slots[slot] || '';
+      padValue = '';
+      padTouched = false;
       $('padPos').textContent = POS_NAME[slot];
       $('padError').textContent = '';
       updatePad();
@@ -1269,7 +1303,12 @@
     }
     function updatePad() {
       const d = $('padDisplay');
-      d.textContent = padValue || '空欄（選手なし）';
+      if (!padTouched && padCurrent) {
+        d.textContent = `いま ${padCurrent}番（入力すると上書き）`;
+        d.classList.add('empty');
+        return;
+      }
+      d.textContent = padValue || (padTouched ? '空欄（選手なし）' : '背番号を入力');
       d.classList.toggle('empty', !padValue);
     }
     function padError(msg) {
@@ -1279,6 +1318,7 @@
     }
     function pressKey(key) {
       $('padError').textContent = '';
+      padTouched = true;
       if (key === 'del') padValue = padValue.slice(0, -1);
       else if (key === 'clear') padValue = '';
       else if (padValue.length >= 3) { padError('背番号は3桁までです'); return; }
@@ -1287,6 +1327,7 @@
     }
     function confirmPad() {
       const t = team();
+      if (!padTouched) { closePad(); return; }   // 何も入力していなければそのまま
       if (padValue) {
         const dup = Object.keys(t.slots).find(k => k !== editingSlot && t.slots[k] === padValue);
         if (dup) { padError(`${padValue}番は${POS_NAME[dup]}に登録済みです`); return; }
@@ -1670,10 +1711,13 @@
     // 試合画面の左上のボタン
     //  第2・第3セットの開始前 → オーダー変更（選手交代の修正）
     //  それ以外 → 第2セットはメニュー、第1・第3セットは確認画面
+    //  第3セットの開始前 → 左上は確認画面、右上にオーダー変更
     function updateMatchBack() {
+      const ready = match && match.phase === 'ready';
       $('matchBack').textContent =
-        match && match.phase === 'ready' && data.setNo > 1 ? '‹ オーダー変更'
+        ready && data.setNo === 2 ? '‹ オーダー変更'
         : data.setNo === 2 ? '‹ メニュー' : '‹ 確認画面';
+      $('matchEdit').hidden = !(ready && data.setNo === 3);
     }
 
     // チーム名は得点と同じ大きさ。枠に収まらない長い名前だけ自動で縮める
@@ -1813,7 +1857,37 @@
       else { commitSet(); proceedToSet(); }
     }
 
+    function resumeSession(st) {
+      data = st.data;
+      match = st.match;
+      teamIndex = st.teamIndex || 0;
+      editMode = !!st.editMode;
+      editFrom = st.editFrom || null;
+      editSnapshot = st.editSnapshot || null;
+      withSub = !!st.withSub;
+      controlsPhase = null;
+      const target = st.current;
+      if (target === 'setup') renderSetup();
+      else if (target === 'confirm') renderConfirm();
+      else if (target === 'match' && match) { match.sideOut = false; match.lastScored = null; renderMatch(); }
+      else if (target === 'setEnd' && match) { renderMatch(); renderSetEnd(); setSub(withSub); }
+      else return;
+      goTo(target);
+      toast('前回の続きから再開しました');
+    }
+    // 起動時：途中の試合があれば再開するか確認
+    function offerResume() {
+      const st = loadSession();
+      if (!st) return false;
+      const where = st.current === 'match' || st.current === 'setEnd'
+        ? `第${st.data.setNo}セットの途中` : 'オーダー登録の途中';
+      askConfirm(`前回の続きがあります（${where}）。\n続きから再開しますか？`, '再開する', '最初から')
+        .then(ok => { if (ok) resumeSession(st); else clearSession(); });
+      return true;
+    }
+
     function quit() {
+      clearSession();
       const fw = $('farewell');
       fw.classList.remove('show'); void fw.offsetWidth;
       fw.classList.add('show');
@@ -1850,8 +1924,9 @@
       else if (action === 'end-set') { renderSetEnd(); goTo('setEnd'); }
       else if (action === 'undo') undoPoint();
       else if (action === 'sub-set') setSub(btn.dataset.val === '1');
+      else if (action === 'match-edit') startEdit(true, 'match');
       else if (action === 'next-set') nextSet();
-      else if (action === 'menu-end') { match = null; showMenu(); }
+      else if (action === 'menu-end') { match = null; clearSession(); showMenu(); }
       else if (action === 'menu') {
         const msg = data.setNo > 1 ? '試合を終了してメニューに戻りますか？' : 'メニューに戻りますか？\n登録したオーダーは消えます。';
         askConfirm(msg, 'メニューに戻る').then(ok => { if (ok) showMenu(); });
@@ -1871,8 +1946,11 @@
           else { teamIndex = 1; renderSetup(); goTo('setup', true); }
         }
         else if (current === 'setEnd') goTo('match', true);
-        else if (current === 'match' && match && match.phase === 'ready' && data.setNo > 1) {
+        else if (current === 'match' && match && match.phase === 'ready' && data.setNo === 2) {
           startEdit(true, 'match');          // 選手交代の修正
+        }
+        else if (current === 'match' && match && match.phase === 'ready' && data.setNo === 3) {
+          renderConfirm(); goTo('confirm', true);   // まだ得点がないので確認なしで戻る
         }
         else if (current === 'match') {
           if (data.setNo === 2) {
@@ -1909,6 +1987,11 @@
         setTimeout(() => layer.remove(), 500);
       }
 
+      if (loadSession()) {
+        layer.remove(); document.body.classList.add('ready');
+        setTimeout(offerResume, 100);
+        return;
+      }
       if (reduceMotion) { layer.remove(); document.body.classList.add('ready'); return; }
       layer.addEventListener('click', finish);
 

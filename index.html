@@ -692,10 +692,21 @@
       cursor: pointer;
       overflow: hidden;
     }
-    #opening svg { width: min(94vw, 620px); height: auto; overflow: visible; }
+    #opSvg { width: min(94vw, 620px); height: auto; overflow: visible; }
     .op-floor { stroke: rgba(255,255,255,.35); stroke-width: 2; }
     .op-net-pole { stroke: rgba(255,255,255,.6); stroke-width: 3; }
     .op-net { fill: rgba(255,255,255,.08); stroke: rgba(255,255,255,.6); stroke-width: 1.5; }
+    .op-start {
+      position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+      z-index: 2;
+      background: var(--navy); color: #fff;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .op-start[hidden] { display: none; }
+    .op-start-ball { width: 64px; height: 64px; margin-bottom: 18px; animation: fwBounce .9s cubic-bezier(.3,0,.5,1) infinite alternate; }
+    .op-start-text { margin: 0; font-size: 1.4rem; font-weight: 800; letter-spacing: .08em; animation: blink 1.6s ease-in-out infinite; }
+    .op-start-sub { margin: 8px 0 0; font-size: .85rem; color: rgba(255,255,255,.55); }
+    @keyframes blink { 50% { opacity: .45; } }
     .op-skip {
       position: absolute;
       bottom: calc(24px + env(safe-area-inset-bottom, 0px));
@@ -748,7 +759,7 @@
       .back-btn { padding: 6px 10px; font-size: .9rem; }
 
       /* オープニング：山なりのボールまで画面に収める */
-      #opening svg { width: min(94vw, calc(var(--vh) * 120)); margin-top: calc(var(--vh) * 22); }
+      #opSvg { width: min(94vw, calc(var(--vh) * 120)); margin-top: calc(var(--vh) * 22); }
       .op-skip { bottom: calc(8px + env(safe-area-inset-bottom, 0px)); }
 
       /* メニュー */
@@ -887,6 +898,12 @@
       <g id="opBall"></g>
     </svg>
     <div class="op-skip">タップでスキップ</div>
+    <!-- ブラウザで開いたとき：最初のタップで全画面にしてからオープニングを始める -->
+    <div class="op-start" id="opStart" hidden>
+      <div class="op-start-ball" id="opStartBall"></div>
+      <p class="op-start-text">タップしてスタート</p>
+      <p class="op-start-sub">全画面で表示します</p>
+    </div>
     <div class="op-wipe" id="opWipe"></div>
   </div>
 
@@ -1895,7 +1912,7 @@
       const where = st.current === 'match' || st.current === 'setEnd'
         ? `第${st.data.setNo}セットの途中` : 'オーダー登録の途中';
       askConfirm(`前回の続きがあります（${where}）。\n続きから再開しますか？`, '再開する', '最初から')
-        .then(ok => { if (ok) { goFullscreen(); resumeSession(st); } else clearSession(); });
+        .then(ok => { goFullscreen(); if (ok) resumeSession(st); else clearSession(); });
       return true;
     }
 
@@ -2006,7 +2023,20 @@
         return;
       }
       if (reduceMotion) { layer.remove(); document.body.classList.add('ready'); return; }
-      layer.addEventListener('click', finish);
+      // ブラウザで開いたとき（ホーム画面のアプリ以外）は、最初のタップで全画面にしてから始める
+      // → 全画面の注記がオープニング中に出て、登録画面では邪魔にならない
+      const tapToStart = canFS && isTouch && !inAppMode && !document.fullscreenElement;
+      let started = !tapToStart;
+      layer.addEventListener('click', () => {
+        if (!started) {
+          started = true;
+          goFullscreen();
+          $('opStart').hidden = true;
+          setTimeout(begin, 350);   // 全画面への切り替えを待ってから
+          return;
+        }
+        finish();
+      });
 
       const NS = 'http://www.w3.org/2000/svg';
       const GROUND = 250;
@@ -2208,7 +2238,12 @@
         start = performance.now();
         raf = requestAnimationFrame(frame);
       }
-      begin();
+      if (tapToStart) {
+        $('opStartBall').innerHTML = ballSvg(64);
+        $('opStart').hidden = false;
+      } else {
+        begin();
+      }
     })();
   </script>
 </body>
